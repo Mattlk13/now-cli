@@ -1,5 +1,5 @@
-const getWritableDirectory = require('../../packages/now-build-utils/fs/get-writable-directory.js');
-const glob = require('../../packages/now-build-utils/fs/glob.js');
+const fs = require('fs-extra');
+const { glob, getWriteableDirectory } = require('@vercel/build-utils');
 
 function runAnalyze(wrapper, context) {
   if (wrapper.analyze) {
@@ -11,14 +11,22 @@ function runAnalyze(wrapper, context) {
 
 async function runBuildLambda(inputPath) {
   const inputFiles = await glob('**', inputPath);
-  const nowJsonRef = inputFiles['now.json'];
-  expect(nowJsonRef).toBeDefined();
+  const nowJsonRef = inputFiles['vercel.json'] || inputFiles['now.json'];
+
+  if (typeof expect !== 'undefined') {
+    expect(nowJsonRef).toBeDefined();
+  }
   const nowJson = require(nowJsonRef.fsPath);
-  expect(nowJson.builds.length).toBe(1);
   const build = nowJson.builds[0];
-  expect(build.src.includes('*')).toBeFalsy();
+
+  if (typeof expect !== 'undefined') {
+    expect(build.src.includes('*')).toBeFalsy();
+  }
   const entrypoint = build.src.replace(/^\//, ''); // strip leftmost slash
-  expect(inputFiles[entrypoint]).toBeDefined();
+
+  if (typeof expect !== 'undefined') {
+    expect(inputFiles[entrypoint]).toBeDefined();
+  }
   inputFiles[entrypoint].digest =
     'this-is-a-fake-digest-for-non-default-analyze';
   const wrapper = require(build.use);
@@ -26,15 +34,15 @@ async function runBuildLambda(inputPath) {
   const analyzeResult = runAnalyze(wrapper, {
     files: inputFiles,
     entrypoint,
-    config: build.config
+    config: build.config,
   });
 
-  const workPath = await getWritableDirectory();
+  const workPath = await fs.realpath(await getWriteableDirectory());
   const buildResult = await wrapper.build({
     files: inputFiles,
     entrypoint,
     config: build.config,
-    workPath
+    workPath,
   });
   const { output } = buildResult;
 
@@ -43,7 +51,7 @@ async function runBuildLambda(inputPath) {
     buildResult.output = Object.keys(output).reduce(
       (result, path) => ({
         ...result,
-        [path.replace(/\\/g, '/')]: output[path]
+        [path.replace(/\\/g, '/')]: output[path],
       }),
       {}
     );
@@ -52,7 +60,7 @@ async function runBuildLambda(inputPath) {
   return {
     analyzeResult,
     buildResult,
-    workPath
+    workPath,
   };
 }
 
